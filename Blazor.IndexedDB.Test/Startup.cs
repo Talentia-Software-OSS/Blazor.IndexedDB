@@ -1,5 +1,5 @@
 using System.Collections.Generic;
-using Microsoft.AspNetCore.Components.Builder;
+using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using TG.Blazor.IndexedDB;
 
@@ -33,9 +33,9 @@ namespace Blazor.IndexedDB.Test
             });
         }
 
-        public void Configure(IComponentsApplicationBuilder app)
+        public void Configure(WebAssemblyHostBuilder app)
         {
-            app.AddComponent<App>("app");
+            app.RootComponents.Add<App>("app");
         }
     }
 }

@@ -1,21 +1,26 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk.Razor">
 
   <PropertyGroup>
-    <TargetFramework>netstandard2.0</TargetFramework>
+    <TargetFramework>net7.0</TargetFramework>
     <RazorLangVersion>3.0</RazorLangVersion>
     <TypeScriptCompileBlocked>true</TypeScriptCompileBlocked>
     <TypeScriptToolsVersion>Latest</TypeScriptToolsVersion>
     <DefaultItemExcludes>${DefaultItemExcludes};dist\**;node_modules\**</DefaultItemExcludes>
     <AssemblyName>TG.Blazor.IndexedDB</AssemblyName>
     <RootNamespace>TG.Blazor.IndexedDB</RootNamespace>
-    <Version>1.5.0-preview</Version>
-    <Authors>William Tulloch</Authors>
+    <Version>9.0</Version>
+    <Authors>William Tulloch, Talentia Software</Authors>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <RepositoryUrl>https://github.com/wtulloch/Blazor.IndexedDB</RepositoryUrl>
+    <RepositoryUrl>https://github.com/Talentia-Software-OSS/Blazor.IndexedDB</RepositoryUrl>
     <RepositoryType>GIT</RepositoryType>
-    <Description>A Blazor library for interacting with IndexedDB</Description>
-    <Copyright>Copyright 2019 William Tulloch</Copyright>
-    <PackageReleaseNotes>Updated to work with both server and client-side Blazor</PackageReleaseNotes>
+    <Description>A Blazor library for interacting with IndexedDB based on the original G.Blazor.IndexedDB created by William Tulloch</Description>
+    <PackageReleaseNotes>Updated to work with client-side Blazor</PackageReleaseNotes>
+    <RunAnalyzersDuringBuild>false</RunAnalyzersDuringBuild>
+	<RunAnalyzersDuringLiveAnalysis>false</RunAnalyzersDuringLiveAnalysis>
+	<RunAnalyzers>false</RunAnalyzers>
+	<GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+	<OutputType>Library</OutputType>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <ItemGroup>
@@ -27,6 +32,9 @@
     <WebpackInputs Include="**\*.ts" Exclude="wwwroot\**;node_modules\**; **\*.d.ts" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Remove="wwwroot\indexedDb.Blazor.js" />
+  </ItemGroup>
 
   <ItemGroup>
     <Folder Include="IndexedDB\" />
@@ -41,8 +49,8 @@
 
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.AspNetCore.Components" Version="3.1.5" />
-    <PackageReference Include="Microsoft.AspNetCore.Components.Web" Version="3.1.5" />
+	  <PackageReference Include="Microsoft.AspNetCore.Components" Version="7.0.*" />
+	  <PackageReference Include="Microsoft.AspNetCore.Components.Web" Version="7.0.*" />
   </ItemGroup>
 
   <Target Name="EnsureNpmRestored" Condition="!Exists('node_modules')">
@@ -53,9 +61,11 @@
   <Target Name="RunWebpack" AfterTargets="ResolveReferences" Inputs="@(WebpackInputs)" Outputs="dist\indexedDb.Blazor.js" DependsOnTargets="EnsureNpmRestored">
     <Exec Command="npm run build:debug" Condition="'$(Configuration)' == 'Debug'" />
     <Exec Command="npm run build:production" Condition="'$(Configuration)' != 'Debug'" />
+	  <!--
     <ItemGroup>
-      <Content Include="wwwroot\**\*.js" />
-    </ItemGroup>
+	    <Content Include="wwwroot\**\*.js" />
+	</ItemGroup>
+	-->
   </Target>
 
  
