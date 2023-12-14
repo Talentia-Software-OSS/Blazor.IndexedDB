@@ -1,11 +1,12 @@
 ﻿///// <reference path="Microsoft.JSInterop.d.ts"/>
-import idb from '../node_modules/idb/lib/idb';
-import { DB, UpgradeDB, ObjectStore, Transaction } from '../node_modules/idb/lib/idb';
 import { IDbStore, IIndexSearch, IIndexSpec, IStoreRecord, IStoreSchema, IDotNetInstanceWrapper, IDbInformation } from './InteropInterfaces';
+import { openDB, DBSchema, deleteDB, IDBPDatabase, IDBPObjectStore } from 'idb';
+
+export type DB = IDBPDatabase<DBSchema>;
 
 export class IndexedDbManager {
 
-    private dbInstance:any = undefined;
+    private dbInstance: DB = undefined as any;
     private dotnetCallback = (message: string) => { };
 
     constructor() { }
@@ -22,12 +23,17 @@ export class IndexedDbManager {
                 if (this.dbInstance) {
                     this.dbInstance.close();
                 }
-                this.dbInstance = await idb.open(dbStore.dbName, dbStore.version, upgradeDB => {
-                    this.upgradeDatabase(upgradeDB, dbStore);
-                });
+                this.dbInstance = await openDB(
+                    dbStore.dbName,
+                    dbStore.version,
+                    {
+                        upgrade: (db, oldVersion, newVersion, transaction) => {
+                            this.upgradeDatabase(db, dbStore, oldVersion, newVersion);
+                        }
+                    });
             }
         } catch (e) {
-            this.dbInstance = await idb.open(dbStore.dbName);
+            this.dbInstance = await openDB(dbStore.dbName);
         }
         
         return `IndexedDB ${data.dbName} opened`;
@@ -35,10 +41,10 @@ export class IndexedDbManager {
 
     public getDbInfo = async (dbName: string) : Promise<IDbInformation> => {
         if (!this.dbInstance) {
-            this.dbInstance = await idb.open(dbName);
+            this.dbInstance = await openDB<DBSchema>(dbName);
         }
 
-        const currentDb = <DB>this.dbInstance;
+        const currentDb = this.dbInstance;
 
         let getStoreNames = (list: DOMStringList): string[] => {
             let names: string[] = [];
@@ -56,11 +62,11 @@ export class IndexedDbManager {
     }
 
     public deleteDb = async(dbName: string): Promise<string> => {
-        this.dbInstance.close();
+        this.dbInstance?.close();
 
-        await idb.delete(dbName);
+        await deleteDB(dbName);
 
-        this.dbInstance = undefined;
+        this.dbInstance = undefined as any;
 
         return `The database ${dbName} has been deleted`;
     }
@@ -69,11 +75,13 @@ export class IndexedDbManager {
         const stName = record.storename;
         let itemToSave = record.data;
         const tx = this.getTransaction(this.dbInstance, stName, 'readwrite');
-        const objectStore = tx.objectStore(stName);
+        const objectStore = tx.objectStore(stName as never);
 
         itemToSave = this.checkForKeyPath(objectStore, itemToSave);
 
-        const result = await objectStore.add(itemToSave, record.key);
+        const result = objectStore.add === undefined 
+            ? undefined
+            : await objectStore.add(itemToSave, record.key);
 
         return `Added new record with id ${result}`;
     }
@@ -81,8 +89,11 @@ export class IndexedDbManager {
     public updateRecord = async (record: IStoreRecord): Promise<string> => {
         const stName = record.storename;
         const tx = this.getTransaction(this.dbInstance, stName, 'readwrite');
+        const objectStore = tx.objectStore(stName as never);
 
-        const result = await tx.objectStore(stName).put(record.data, record.key);
+        const result = objectStore.put === undefined
+            ? undefined
+            : await objectStore.put(record.data, record.key);
        
         return `updated record with id ${result}`;
     }
@@ -90,9 +101,9 @@ export class IndexedDbManager {
     public getRecords = async (storeName: string): Promise<any> => {
         const tx = this.getTransaction(this.dbInstance, storeName, 'readonly');
 
-        let results = await tx.objectStore(storeName).getAll();
+        let results = await tx.objectStore(storeName as never).getAll();
 
-        await tx.complete;
+        await tx.done;
 
         return results;
     }
@@ -100,20 +111,27 @@ export class IndexedDbManager {
     public clearStore = async (storeName: string): Promise<string> => {
         
         const tx = this.getTransaction(this.dbInstance, storeName, 'readwrite');
+        const objectStore = tx.objectStore(storeName as never);
 
-        await tx.objectStore(storeName).clear();
-        await tx.complete;
+        if (objectStore.clear !== undefined) {
+            await objectStore.clear();
+        }
+        await tx.done;
 
         return `Store ${storeName} cleared`;
     }
 
     public getRecordByIndex = async (searchData: IIndexSearch): Promise<any> => {
         const tx = this.getTransaction(this.dbInstance, searchData.storename, 'readonly');
-        const results = await tx.objectStore(searchData.storename)
-            .index(searchData.indexName)
+        const objectStore = tx.objectStore(searchData.storename as never);
+        if (!objectStore.indexNames.contains(searchData.indexName as never)) {
+            return undefined;
+        }
+        const results = await objectStore
+            .index(searchData.indexName as never)
             .get(searchData.queryValue);
 
-        await tx.complete;
+        await tx.done;
         return results;
     }
 
@@ -121,21 +139,15 @@ export class IndexedDbManager {
         const tx = this.getTransaction(this.dbInstance, searchData.storename, 'readonly');
         let results: any[] = [];
 
-        tx.objectStore(searchData.storename)
-            .index(searchData.indexName)
-            .iterateCursor(cursor => {
-                if (!cursor) {
-                    return;
-                }
-
-                if (cursor.key === searchData.queryValue) {
-                    results.push(cursor.value);
-                }
-
-                cursor.continue();
-            });
-
-        await tx.complete;
+        const objectStore = tx.objectStore(searchData.storename as never);
+        let cursor = await objectStore.index(searchData.indexName as never).openCursor();
+        while (cursor) {
+            if (cursor.key === searchData.queryValue) {
+                results.push(cursor.value);
+            }
+            cursor = await cursor.continue();
+        }
+        await tx.done;
 
         return results;
     }
@@ -143,22 +155,25 @@ export class IndexedDbManager {
     public getRecordById = async (storename: string, id: any): Promise<any> => {
 
         const tx = this.getTransaction(this.dbInstance, storename, 'readonly');
+        const objectStore = tx.objectStore(storename as never);
 
-        let result = await tx.objectStore(storename).get(id);
+        let result = await objectStore.get(id);
         return result;
     }
 
     public deleteRecord = async (storename: string, id: any): Promise<string> => {
         const tx = this.getTransaction(this.dbInstance, storename, 'readwrite');
-
-        await tx.objectStore(storename).delete(id);
+        const objectStore = tx.objectStore(storename as never);
+        if (objectStore.delete !== undefined) {
+            await objectStore.delete(id);
+        }
 
         return `Record with id: ${id} deleted`;
     }
 
     private getTransaction(dbInstance: DB, stName: string, mode?: 'readonly' | 'readwrite') {
-        const tx = dbInstance.transaction(stName, mode);
-        tx.complete.catch(
+        const tx = dbInstance.transaction(stName as never, mode);
+        tx.done.catch(
             err => {
                 if (err) {
                     console.error((err as Error).message);
@@ -172,7 +187,7 @@ export class IndexedDbManager {
     }
 
     // Currently don't support aggregate keys
-    private checkForKeyPath(objectStore: ObjectStore<any, any>, data: any) {
+    private checkForKeyPath(objectStore: IDBPObjectStore<DBSchema, [never], never, "readonly" | "readwrite">, data: any) {
         if (!objectStore.autoIncrement || !objectStore.keyPath) {
             return data;
         }
@@ -189,11 +204,11 @@ export class IndexedDbManager {
         return data;
     }
 
-    private upgradeDatabase(upgradeDB: UpgradeDB, dbStore: IDbStore) {
-        if (upgradeDB.oldVersion < dbStore.version) {
+    private upgradeDatabase(upgradeDB: IDBPDatabase<DBSchema>, dbStore: IDbStore, oldVersion: number, newVersion: number | null) {
+        if (oldVersion < dbStore.version) {
             if (dbStore.stores) {
                 for (var store of dbStore.stores) {
-                    if (!upgradeDB.objectStoreNames.contains(store.name)) {
+                    if (!upgradeDB.objectStoreNames.contains(store.name as never)) {
                         this.addNewStore(upgradeDB, store);
                         this.dotnetCallback(`store added ${store.name}: db version: ${dbStore.version}`);
                     }
@@ -202,17 +217,17 @@ export class IndexedDbManager {
         }
     }
 
-    private addNewStore(upgradeDB: UpgradeDB, store: IStoreSchema) {
+    private addNewStore(upgradeDB: IDBPDatabase<DBSchema>, store: IStoreSchema) {
         let primaryKey = store.primaryKey;
 
         if (!primaryKey) {
             primaryKey = { name: 'id', keyPath: 'id', auto: true };
         }
 
-        const newStore = upgradeDB.createObjectStore(store.name, { keyPath: primaryKey.keyPath, autoIncrement: primaryKey.auto });
+        const newStore = upgradeDB.createObjectStore(store.name as never, { keyPath: primaryKey.keyPath, autoIncrement: primaryKey.auto });
 
         for (var index of store.indexes) {
-            newStore.createIndex(index.name, index.keyPath, { unique: index.unique });
+            newStore.createIndex(index.name as never, index.keyPath, { unique: index.unique });
         }
     }
 }

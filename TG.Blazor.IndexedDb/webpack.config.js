@@ -5,7 +5,7 @@ module.exports = (env, args) =>({
     resolve: {
         extensions: ['.ts', '.js']
     },
-    devtool: args.mode === 'development' ? 'inline-source-map' : 'none',
+    devtool: args.mode === 'development' ? 'inline-source-map' : false,
     module: {
         rules: [
             {
